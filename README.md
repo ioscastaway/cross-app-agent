@@ -47,19 +47,19 @@ the product: the OS is making the user, not the developer, decide.
 
 ## Experiment
 
-**The surface.** A draggable circle sits on top of whatever you are using, showing one face per
-state: a waving hand at rest, a microphone while listening, an hourglass while it drives the phone,
-a robot when it needs an answer, a thumbs up when it lands. The ring around it carries the same
-state in colour, and a sweeping arc or expanding rings say the difference between "thinking" and
-"listening" at a glance. Drag it anywhere and it snaps to the nearest edge; long-press dismisses it.
-A small panel under the bubble streams what the agent is doing. The app's own screen is now just
-setup and a debug console.
+**The surface.** A small character floats on top of whatever you are using, in one of six poses:
+waving at rest, holding a microphone while listening, watching an hourglass while it drives the
+phone, raising a question mark when it needs an answer, a check on success, a cross on failure.
+There is no disc behind it — the artwork is a cut-out and stands on its own, with a contact shadow
+that tightens as it bobs so it reads as hovering rather than pasted on. Drag it anywhere and it
+snaps to the nearest edge; long-press dismisses it. A small panel under it streams what the agent
+is doing. The app's own screen is now just setup and a debug console.
 
-The faces are Microsoft's Fluent Emoji (MIT) — see `third_party/`. To use your own character
-instead, drop `idle.png`, `listening.png`, `working.png`, `asking.png`, `done.png`, `failed.png`
-into `Android/data/com.ioscastaway.crossappagent/files/bubble/` on the device. Those files stay on
-the phone and never enter this repository, which is the point: art you do not own should not be
-committed to it.
+To swap in different art, drop `idle.png`, `listening.png`, `working.png`, `asking.png`, `done.png`
+and `failed.png` into `Android/data/com.ioscastaway.crossappagent/files/bubble/` on the device.
+Those files stay on the phone and never enter this repository — which is deliberate. An earlier
+version of this bubble used a commercial sticker set, and however good it looked, committing it
+would have been infringement.
 
 **The loop.** Text or speech task → Claude tool-use loop → accessibility tree in, actions out.
 

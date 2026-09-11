@@ -182,7 +182,7 @@ class BubbleService : Service() {
     private fun dp(v: Int): Int = (v * resources.displayMetrics.density).roundToInt()
 
     private fun buildBubble() {
-        val size = dp(84)
+        val size = dp(96)
         bubble = BubbleFaceView(this).apply {
             // Keep our own chrome out of the tree the agent reads.
             importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS

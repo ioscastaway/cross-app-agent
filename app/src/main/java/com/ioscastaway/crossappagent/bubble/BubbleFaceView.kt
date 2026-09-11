@@ -5,7 +5,6 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
-import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Rect
 import android.graphics.RectF
@@ -19,22 +18,25 @@ import kotlin.math.roundToInt
 import kotlin.math.sin
 
 /**
- * The bubble's face: a white plate with one Fluent Emoji on it, a ring in the state colour, and a
- * little motion so the thing never looks frozen.
+ * The bubble's face: one cut-out character per agent state, drawn straight onto the screen.
  *
- * Art is Microsoft's Fluent Emoji (MIT) rather than anything drawn here, and the licence travels
- * with the repository in `third_party/`. To use your own character instead, drop images into the
- * app's external files directory — see [customDirHint]. Those stay on the device.
+ * No plate and no ring. The character already says what is happening — a microphone while
+ * listening, an hourglass while working, a question mark when it needs an answer — so a coloured
+ * disc behind it would only box in artwork that was drawn to stand on its own. All that is added is
+ * a soft contact shadow, which is what keeps it readable over a light wallpaper.
+ *
+ * To use different art, drop `idle.png`, `listening.png`, `working.png`, `asking.png`, `done.png`
+ * and `failed.png` into the directory [customDirHint] reports. Those stay on the device.
  */
 class BubbleFaceView(context: Context) : View(context) {
 
-    enum class Face(@param:DrawableRes val art: Int, val tint: Int) {
-        IDLE(R.drawable.face_idle, 0xFF7C6BD6.toInt()),
-        LISTENING(R.drawable.face_listening, 0xFFE05252.toInt()),
-        WORKING(R.drawable.face_working, 0xFF2E7CD6.toInt()),
-        ASKING(R.drawable.face_asking, 0xFFE0A32E.toInt()),
-        DONE(R.drawable.face_done, 0xFF3AA35C.toInt()),
-        FAILED(R.drawable.face_failed, 0xFFB54B4B.toInt()),
+    enum class Face(@param:DrawableRes val art: Int) {
+        IDLE(R.drawable.face_idle),
+        LISTENING(R.drawable.face_listening),
+        WORKING(R.drawable.face_working),
+        ASKING(R.drawable.face_asking),
+        DONE(R.drawable.face_done),
+        FAILED(R.drawable.face_failed),
     }
 
     var face: Face = Face.IDLE
@@ -46,22 +48,17 @@ class BubbleFaceView(context: Context) : View(context) {
 
     private var phase = 0f
 
-    private val plate = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = PLATE }
-    private val shadow = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0x40000000 }
-    private val ring = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.STROKE
-        strokeCap = Paint.Cap.ROUND
-    }
     private val art = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+    private val shadow = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0x33000000 }
 
-    private val arc = RectF()
     private val dst = Rect()
+    private val ground = RectF()
 
     private val builtIn = HashMap<Face, Bitmap?>()
     private val custom = HashMap<Face, Bitmap?>()
 
     private val ticker = ValueAnimator.ofFloat(0f, 1f).apply {
-        duration = 1500
+        duration = 2200
         repeatCount = ValueAnimator.INFINITE
         interpolator = LinearInterpolator()
         addUpdateListener {
@@ -87,10 +84,9 @@ class BubbleFaceView(context: Context) : View(context) {
     }
 
     private fun bitmapFor(f: Face): Bitmap? = custom.getOrPut(f) {
-        val dir = context.getExternalFilesDir(CUSTOM_DIR)
-        dir?.let { d ->
+        context.getExternalFilesDir(CUSTOM_DIR)?.let { dir ->
             sequenceOf("png", "webp", "jpg", "jpeg")
-                .map { File(d, f.name.lowercase() + "." + it) }
+                .map { File(dir, f.name.lowercase() + "." + it) }
                 .firstOrNull(File::isFile)
                 ?.let { runCatching { BitmapFactory.decodeFile(it.absolutePath) }.getOrNull() }
         }
@@ -102,20 +98,21 @@ class BubbleFaceView(context: Context) : View(context) {
         val s = min(width, height).toFloat()
         val cx = width / 2f
         val cy = height / 2f
-        val r = s * 0.33f
 
-        // A slow bob keeps the bubble alive without pulling the eye the way a spin would.
-        val bob = sin(phase * TWO_PI) * s * 0.012f
+        // A slow float, and a shadow that tightens as the character rises, so it reads as hovering
+        // rather than as a sticker pasted on the screen.
+        val lift = sin(phase * TWO_PI)
+        val bob = lift * s * 0.022f
 
-        canvas.drawCircle(cx, cy + bob + s * 0.018f, r, shadow)
-        canvas.drawCircle(cx, cy + bob, r, plate)
-
-        ring.color = face.tint
-        ring.strokeWidth = s * 0.028f
-        canvas.drawCircle(cx, cy + bob, r - ring.strokeWidth / 2f, ring)
+        val groundW = s * (0.30f - lift * 0.02f)
+        val groundH = s * (0.045f - lift * 0.006f)
+        val groundY = cy + s * 0.41f
+        ground.set(cx - groundW, groundY - groundH, cx + groundW, groundY + groundH)
+        shadow.alpha = (44 - lift * 10).roundToInt().coerceIn(0, 255)
+        canvas.drawOval(ground, shadow)
 
         bitmapFor(face)?.let { bmp ->
-            val half = (r * 0.66f).roundToInt()
+            val half = s * 0.47f
             dst.set(
                 (cx - half).roundToInt(),
                 (cy + bob - half).roundToInt(),
@@ -124,38 +121,10 @@ class BubbleFaceView(context: Context) : View(context) {
             )
             canvas.drawBitmap(bmp, null, dst, art)
         }
-
-        drawStateMotion(canvas, cx, cy + bob, r, s)
-    }
-
-    /** Motion outside the plate: a sweeping arc while working, expanding rings while listening. */
-    private fun drawStateMotion(canvas: Canvas, cx: Float, cy: Float, r: Float, s: Float) {
-        when (face) {
-            Face.WORKING -> {
-                ring.color = face.tint
-                ring.strokeWidth = s * 0.042f
-                val rr = r + s * 0.06f
-                arc.set(cx - rr, cy - rr, cx + rr, cy + rr)
-                canvas.drawArc(arc, phase * 360f, 100f, false, ring)
-            }
-            Face.LISTENING -> {
-                ring.strokeWidth = s * 0.03f
-                for (i in 0..1) {
-                    val t = (phase + i * 0.5f) % 1f
-                    ring.color = Color.argb(
-                        ((1f - t) * 170).toInt(),
-                        Color.red(face.tint), Color.green(face.tint), Color.blue(face.tint),
-                    )
-                    canvas.drawCircle(cx, cy, r + t * s * 0.16f, ring)
-                }
-            }
-            else -> Unit
-        }
     }
 
     companion object {
         const val CUSTOM_DIR = "bubble"
-        private const val PLATE = 0xF2FFFFFF.toInt()
         private const val TWO_PI = (Math.PI * 2).toFloat()
 
         /** Shown in the app so you know where to put your own art. */
