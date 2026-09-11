@@ -413,7 +413,7 @@ class BubbleService : Service() {
             scope.launch { delay(3500); state = State.IDLE; hidePanel() }
             return
         }
-        val client = ApiKeyStore.client(applicationContext)
+        val client = ApiKeyStore.client()
         if (client == null) {
             state = State.RESULT
             clearLog()

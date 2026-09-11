@@ -49,7 +49,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
@@ -57,7 +56,6 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.ioscastaway.crossappagent.agent.ApiKeySource
 import com.ioscastaway.crossappagent.bubble.BubbleService
 
 class MainActivity : ComponentActivity() {
@@ -140,11 +138,9 @@ fun AgentScreen(vm: AgentViewModel = viewModel()) {
             StatusCard(
                 bound = state.serviceBound,
                 enabledInSettings = state.serviceEnabledInSettings,
-                apiKeySource = state.apiKeySource,
+                apiKeyPresent = state.apiKeyPresent,
                 onOpenSettings = { context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) },
                 onRefresh = vm::refreshServiceStatus,
-                onSaveKey = vm::saveApiKey,
-                onClearKey = vm::clearApiKey,
             )
 
             Spacer(Modifier.height(12.dp))
@@ -246,7 +242,7 @@ private fun BubbleCard(
             if (!hasMic) NeedRow("Microphone", "Grant", onGrantMic)
             if (!hasNotifications) NeedRow("Notifications (bubble runs as a foreground service)", "Grant", onGrantNotifications)
             if (!serviceBound) Text("• Accessibility service is off — see below", style = MaterialTheme.typography.bodySmall)
-            if (!hasKey) Text("• No API key yet — see below", style = MaterialTheme.typography.bodySmall)
+            if (!hasKey) Text("• No API key in this build - see below", style = MaterialTheme.typography.bodySmall)
 
             Spacer(Modifier.height(8.dp))
             if (bubbleOn) {
@@ -270,59 +266,25 @@ private fun NeedRow(label: String, action: String, onClick: () -> Unit) {
 private fun StatusCard(
     bound: Boolean,
     enabledInSettings: Boolean,
-    apiKeySource: ApiKeySource,
+    apiKeyPresent: Boolean,
     onOpenSettings: () -> Unit,
     onRefresh: () -> Unit,
-    onSaveKey: (String) -> Unit,
-    onClearKey: () -> Unit,
 ) {
-    var editingKey by remember { mutableStateOf(false) }
-    var keyDraft by remember { mutableStateOf("") }
-    val showKeyField = apiKeySource == ApiKeySource.NONE || editingKey
-
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(12.dp)) {
             Text(
                 when {
                     bound -> "Accessibility service: connected"
                     enabledInSettings -> "Accessibility service: enabled, waiting for the system to bind"
-                    else -> "Accessibility service: OFF — enable \"Cross-App Agent\" in Settings"
+                    else -> "Accessibility service: OFF - enable \"Cross-App Agent\" in Settings"
                 },
                 style = MaterialTheme.typography.bodyMedium,
             )
-            Row {
-                Text(
-                    when (apiKeySource) {
-                        ApiKeySource.NONE -> "Anthropic API key: missing"
-                        ApiKeySource.BUILD -> "Anthropic API key: from local.properties"
-                        ApiKeySource.IN_APP -> "Anthropic API key: saved in app"
-                    },
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-                if (apiKeySource != ApiKeySource.NONE) {
-                    TextButton(onClick = { editingKey = !editingKey }) { Text(if (editingKey) "Cancel" else "Change") }
-                }
-            }
-            if (showKeyField) {
-                OutlinedTextField(
-                    value = keyDraft,
-                    onValueChange = { keyDraft = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text("Paste ANTHROPIC_API_KEY") },
-                    singleLine = true,
-                    visualTransformation = PasswordVisualTransformation(),
-                )
-                Row {
-                    Button(
-                        onClick = { onSaveKey(keyDraft); keyDraft = ""; editingKey = false },
-                        enabled = keyDraft.isNotBlank(),
-                    ) { Text("Save key") }
-                    if (apiKeySource == ApiKeySource.IN_APP) {
-                        Spacer(Modifier.width(8.dp))
-                        TextButton(onClick = { onClearKey(); editingKey = false }) { Text("Remove saved key") }
-                    }
-                }
-            }
+            Text(
+                if (apiKeyPresent) "Anthropic API key: built in"
+                else "Anthropic API key: missing - set ANTHROPIC_API_KEY in local.properties and rebuild",
+                style = MaterialTheme.typography.bodyMedium,
+            )
             Spacer(Modifier.height(8.dp))
             Row {
                 OutlinedButton(onClick = onOpenSettings) { Text("Open accessibility settings") }

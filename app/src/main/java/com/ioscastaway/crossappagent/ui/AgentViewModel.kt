@@ -8,7 +8,6 @@ import androidx.lifecycle.viewModelScope
 import com.anthropic.client.AnthropicClient
 import com.ioscastaway.crossappagent.BuildConfig
 import com.ioscastaway.crossappagent.agent.AgentEvent
-import com.ioscastaway.crossappagent.agent.ApiKeySource
 import com.ioscastaway.crossappagent.agent.ApiKeyStore
 import com.ioscastaway.crossappagent.agent.ClaudeAgent
 import com.ioscastaway.crossappagent.platform.AccessibilityDeviceController
@@ -29,15 +28,13 @@ data class LogLine(val kind: Kind, val text: String) {
 data class AgentUiState(
     val serviceBound: Boolean = false,
     val serviceEnabledInSettings: Boolean = false,
-    val apiKeySource: ApiKeySource = ApiKeySource.NONE,
+    val apiKeyPresent: Boolean = ApiKeyStore.isConfigured,
     val task: String = "",
     val running: Boolean = false,
     val log: List<LogLine> = emptyList(),
     val lastScreen: String = "",
     val pendingQuestion: AgentEvent.Question? = null,
-) {
-    val apiKeyPresent: Boolean get() = apiKeySource != ApiKeySource.NONE
-}
+)
 
 class AgentViewModel(app: Application) : AndroidViewModel(app) {
 
@@ -54,24 +51,8 @@ class AgentViewModel(app: Application) : AndroidViewModel(app) {
             }
         }
         refreshServiceStatus()
-        _state.update { it.copy(apiKeySource = apiKeySource()) }
     }
 
-    // ---------------------------------------------------------------- api key
-
-    private fun apiKeySource(): ApiKeySource = ApiKeyStore.source(getApplication())
-
-    fun saveApiKey(key: String) {
-        ApiKeyStore.save(getApplication(), key)
-        _state.update { it.copy(apiKeySource = apiKeySource()) }
-    }
-
-    fun clearApiKey() {
-        ApiKeyStore.clear(getApplication())
-        _state.update { it.copy(apiKeySource = apiKeySource()) }
-    }
-
-    private fun newClient(): AnthropicClient? = ApiKeyStore.client(getApplication())
 
     // ---------------------------------------------------------------- service status
 
@@ -106,7 +87,7 @@ class AgentViewModel(app: Application) : AndroidViewModel(app) {
         if (task.isEmpty() || _state.value.running || !_state.value.apiKeyPresent) return
         _state.update { it.copy(running = true, log = emptyList(), pendingQuestion = null) }
 
-        val client = newClient() ?: run {
+        val client = ApiKeyStore.client() ?: run {
             _state.update { it.copy(running = false) }
             log(LogLine.Kind.ERROR, "No API key configured")
             return

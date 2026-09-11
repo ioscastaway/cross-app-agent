@@ -8,7 +8,7 @@ screen through the accessibility tree, decides what to tap, and keeps going unti
 > On iOS, no. Here, apparently yes. So naturally, I decided to rationalize the decision through engineering.
 
 **Series:** Android × AI · Things Apple Would Never Let Me Do
-**Status:** builds, JVM tests pass. Cross-app tree reading and the floating bubble are verified on an Android 16 emulator. The model loop itself has not been run end to end yet.
+**Status:** builds, JVM tests pass. Cross-app tree reading, the floating bubble, and one full agent run are verified on an Android 16 emulator. Speech input and real-device behaviour are still unverified.
 
 ## Why I built this
 
@@ -153,6 +153,15 @@ follow once it runs against real tasks.
 - **`uiautomator dump` fights with your service.** Running it while the agent service is enabled
   causes AccessibilityManagerService to disconnect and rebind third-party services. Use
   `adb exec-out screencap` and fixed coordinates for scripted testing instead.
+- **The loop closes.** First end-to-end run, from the debug console: one `launch_app` call, a
+  one-line check that the right screen came up, then `done`. No wasted `read_screen`, because every
+  action tool already returns the new screen in its result.
+  ```
+  → launch_app {name=Settings}
+    ✓ Launched Settings (com.android.settings)
+  💭 Settings is open.
+  → done {success=true, summary=Opened the Settings app; main settings menu is displayed.}
+  ```
 - **An overlay is allowed, but the system can still veto it.** The bubble renders over the launcher
   and ordinary apps, yet over Settings it vanished. The window was alive and correctly placed; the
   dump showed `mForceHideNonSystemOverlayWindow=true` and therefore `isVisible=false`. Screens that
