@@ -47,19 +47,22 @@ the product: the OS is making the user, not the developer, decide.
 
 ## Experiment
 
-**The surface.** A small character floats on top of whatever you are using, in one of six poses:
+**The surface.** A pixel-art cat floats on top of whatever you are using, in one of six poses:
 waving at rest, holding a microphone while listening, watching an hourglass while it drives the
-phone, raising a question mark when it needs an answer, a check on success, a cross on failure.
+phone, raising a question mark when it needs an answer, sunglasses and a tick on success, a cross on
+failure. The launcher icon is the same cat, so the thing you tap and the thing that floats are
+recognisably one character.
 There is no disc behind it — the artwork is a cut-out and stands on its own, with a contact shadow
 that tightens as it bobs so it reads as hovering rather than pasted on. Drag it anywhere and it
 snaps to the nearest edge; long-press dismisses it. A small panel under it streams what the agent
 is doing. The app's own screen is now just setup and a debug console.
 
-To swap in different art, drop `idle.png`, `listening.png`, `working.png`, `asking.png`, `done.png`
-and `failed.png` into `Android/data/com.ioscastaway.crossappagent/files/bubble/` on the device.
-Those files stay on the phone and never enter this repository — which is deliberate. An earlier
-version of this bubble used a commercial sticker set, and however good it looked, committing it
-would have been infringement.
+The art was generated for this project, which is the only reason it can live in a public
+repository. The first version of this bubble borrowed a commercial sticker set, and however good it
+looked, committing it would have been infringement. To swap in different art, drop `idle.png`,
+`listening.png`, `working.png`, `asking.png`, `done.png` and `failed.png` into
+`Android/data/com.ioscastaway.crossappagent/files/bubble/` on the device. Those files stay on the
+phone and never enter this repository.
 
 **The loop.** Text or speech task → Claude tool-use loop → accessibility tree in, actions out.
 
