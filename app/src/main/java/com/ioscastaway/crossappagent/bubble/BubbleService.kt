@@ -82,7 +82,7 @@ class BubbleService : Service() {
     private enum class State { IDLE, LISTENING, WORKING, ASKING, RESULT }
 
     private lateinit var windowManager: WindowManager
-    private lateinit var bubble: View
+    private lateinit var bubble: BubbleFaceView
     private lateinit var bubbleParams: WindowManager.LayoutParams
 
     private lateinit var panel: LinearLayout
@@ -92,6 +92,7 @@ class BubbleService : Service() {
     private lateinit var logScroll: ScrollView
     private lateinit var buttonRow: LinearLayout
     private var panelShown = false
+    private var lastRunFailed = false
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var work: Job? = null
@@ -181,13 +182,8 @@ class BubbleService : Service() {
     private fun dp(v: Int): Int = (v * resources.displayMetrics.density).roundToInt()
 
     private fun buildBubble() {
-        val size = dp(56)
-        bubble = View(this).apply {
-            background = GradientDrawable().apply {
-                shape = GradientDrawable.OVAL
-                setColor(COLOR_IDLE)
-            }
-            elevation = dp(6).toFloat()
+        val size = dp(84)
+        bubble = BubbleFaceView(this).apply {
             // Keep our own chrome out of the tree the agent reads.
             importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
             contentDescription = getString(R.string.bubble_content_description)
@@ -273,14 +269,13 @@ class BubbleService : Service() {
     }
 
     private fun paintBubble() {
-        val color = when (state) {
-            State.IDLE -> COLOR_IDLE
-            State.LISTENING -> COLOR_LISTENING
-            State.WORKING -> COLOR_WORKING
-            State.ASKING -> COLOR_ASKING
-            State.RESULT -> COLOR_RESULT
+        bubble.face = when (state) {
+            State.IDLE -> BubbleFaceView.Face.IDLE
+            State.LISTENING -> BubbleFaceView.Face.LISTENING
+            State.WORKING -> BubbleFaceView.Face.WORKING
+            State.ASKING -> BubbleFaceView.Face.ASKING
+            State.RESULT -> if (lastRunFailed) BubbleFaceView.Face.FAILED else BubbleFaceView.Face.DONE
         }
-        (bubble.background as GradientDrawable).setColor(color)
     }
 
     private fun screenWidth() = resources.displayMetrics.widthPixels
@@ -421,6 +416,7 @@ class BubbleService : Service() {
 
     private fun startListening() {
         if (!device.isAvailable()) {
+            lastRunFailed = true
             state = State.RESULT
             clearLog()
             status(getString(R.string.bubble_need_accessibility))
@@ -429,6 +425,7 @@ class BubbleService : Service() {
         }
         val client = ApiKeyStore.client()
         if (client == null) {
+            lastRunFailed = true
             state = State.RESULT
             clearLog()
             status(getString(R.string.bubble_need_key))
@@ -436,6 +433,7 @@ class BubbleService : Service() {
             return
         }
 
+        lastRunFailed = false
         state = State.LISTENING
         clearLog()
         status(getString(R.string.bubble_listening))
@@ -448,6 +446,7 @@ class BubbleService : Service() {
                     is VoiceRecognizer.Event.Partial -> status(ev.text)
                     is VoiceRecognizer.Event.Final -> heard = ev.text
                     is VoiceRecognizer.Event.Failed -> {
+                        lastRunFailed = true
                         state = State.RESULT
                         status(ev.reason)
                         delay(2500)
@@ -546,6 +545,7 @@ class BubbleService : Service() {
     }
 
     private fun finish(success: Boolean, summary: String) {
+        lastRunFailed = !success
         state = State.RESULT
         buttons()
         status((if (success) "✓ " else "✗ ") + summary)
@@ -559,8 +559,3 @@ class BubbleService : Service() {
     }
 }
 
-private const val COLOR_IDLE = 0xFF6750A4.toInt()       // resting purple
-private const val COLOR_LISTENING = 0xFFD32F2F.toInt()  // mic open
-private const val COLOR_WORKING = 0xFF1976D2.toInt()    // driving the phone
-private const val COLOR_ASKING = 0xFFF9A825.toInt()     // waiting on you
-private const val COLOR_RESULT = 0xFF2E7D32.toInt()     // finished

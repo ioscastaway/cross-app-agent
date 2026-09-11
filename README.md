@@ -47,11 +47,19 @@ the product: the OS is making the user, not the developer, decide.
 
 ## Experiment
 
-**The surface.** A draggable circle sits on top of whatever you are using. Tap it, speak, and it
-turns red while listening, blue while driving the phone, amber when it needs an answer from you, and
-green when it is done. Drag it anywhere and it snaps to the nearest edge; long-press dismisses it.
+**The surface.** A draggable circle sits on top of whatever you are using, showing one face per
+state: a waving hand at rest, a microphone while listening, an hourglass while it drives the phone,
+a robot when it needs an answer, a thumbs up when it lands. The ring around it carries the same
+state in colour, and a sweeping arc or expanding rings say the difference between "thinking" and
+"listening" at a glance. Drag it anywhere and it snaps to the nearest edge; long-press dismisses it.
 A small panel under the bubble streams what the agent is doing. The app's own screen is now just
 setup and a debug console.
+
+The faces are Microsoft's Fluent Emoji (MIT) — see `third_party/`. To use your own character
+instead, drop `idle.png`, `listening.png`, `working.png`, `asking.png`, `done.png`, `failed.png`
+into `Android/data/com.ioscastaway.crossappagent/files/bubble/` on the device. Those files stay on
+the phone and never enter this repository, which is the point: art you do not own should not be
+committed to it.
 
 **The loop.** Text or speech task → Claude tool-use loop → accessibility tree in, actions out.
 
