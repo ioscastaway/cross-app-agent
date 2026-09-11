@@ -1,6 +1,6 @@
 # cross-app-agent
 
-A voice-less (for now) phone agent: give it a task in plain language, and it reads whatever app is on
+A circle that floats over every app. Tap it, say what you want, and it reads whatever app is on
 screen through the accessibility tree, decides what to tap, and keeps going until the job is done.
 
 > First experiment after crash-landing on Planet Android. I wanted to know whether the thing Siri
@@ -8,7 +8,7 @@ screen through the accessibility tree, decides what to tap, and keeps going unti
 > On iOS, no. Here, apparently yes. So naturally, I decided to rationalize the decision through engineering.
 
 **Series:** Android × AI · Things Apple Would Never Let Me Do
-**Status:** builds, JVM tests pass, cross-app tree reading verified on an Android 16 emulator. The model loop itself has not been run yet (no API key on the build machine).
+**Status:** builds, JVM tests pass. Cross-app tree reading and the floating bubble are verified on an Android 16 emulator. The model loop itself has not been run end to end yet.
 
 ## Why I built this
 
@@ -38,6 +38,8 @@ So the iOS brain says: an agent that operates other apps is a platform feature, 
 | Back / Home | `performGlobalAction` | |
 | Launch apps from the background | `startActivity` from a system-bound service | Apps with an enabled accessibility service are exempt from Android 10+ background-start restrictions |
 | Know which apps exist | `PackageManager.queryIntentActivities` + `<queries>` | No `QUERY_ALL_PACKAGES` |
+| Float UI over every app | `TYPE_APPLICATION_OVERLAY` + `SYSTEM_ALERT_WINDOW` | The chat-head capability; user grants it in Settings |
+| Voice input | `SpeechRecognizer` | The recogniser itself is a replaceable system component |
 
 The user must enable the service by hand in *Settings › Accessibility*. There is no API to enable it,
 and on Android 13+ sideloaded apps have to pass an extra "restricted settings" step. That friction is
@@ -45,9 +47,15 @@ the product: the OS is making the user, not the developer, decide.
 
 ## Experiment
 
-Phase 1 (this commit): text task → Claude tool-use loop → accessibility tree in, actions out.
+**The surface.** A draggable circle sits on top of whatever you are using. Tap it, speak, and it
+turns red while listening, blue while driving the phone, amber when it needs an answer from you, and
+green when it is done. Drag it anywhere and it snaps to the nearest edge; long-press dismisses it.
+A small panel under the bubble streams what the agent is doing. The app's own screen is now just
+setup and a debug console.
 
-1. The service flattens the active window's node tree into a compact text listing with `[ref]`
+**The loop.** Text or speech task → Claude tool-use loop → accessibility tree in, actions out.
+
+1. The accessibility service flattens the active window's node tree into a compact text listing with `[ref]`
    handles — the Android analogue of a DOM read with `ref_N` ids:
    ```
    app: com.google.android.apps.messaging
@@ -65,9 +73,10 @@ Phase 1 (this commit): text task → Claude tool-use loop → accessibility tree
    the user first.
 5. Password fields are redacted in the serializer before anything is sent anywhere.
 
-Later phases, in order: overlay progress bubble → voice entry point (`ROLE_ASSISTANT` +
-`VoiceInteractionService`, `SpeechRecognizer`, TTS) → Set-of-Marks screenshots → macro cache that
-replays known trajectories without the model → on-device intent router.
+Later phases, in order: spoken replies (TTS) → `ROLE_ASSISTANT` + `VoiceInteractionService` so the
+power button and "hey" wake word reach this agent instead of the stock one → Set-of-Marks
+screenshots → macro cache that replays known trajectories without the model → on-device intent
+router for the cases that never need the cloud.
 
 ## Architecture
 
@@ -86,9 +95,10 @@ replays known trajectories without the model → on-device intent router.
 
 ```
 app/src/main/java/com/ioscastaway/crossappagent/
-├── platform/      AgentAccessibilityService, tree reader, serializer, DeviceController
-├── agent/         ClaudeAgent (loop), AgentTools (schemas), AgentEvent
-└── ui/            MainActivity (Compose), AgentViewModel
+├── platform/      AgentAccessibilityService, tree reader, serializer, DeviceController, VoiceRecognizer
+├── agent/         ClaudeAgent (loop), AgentTools (schemas), AgentEvent, ApiKeyStore
+├── bubble/        BubbleService — the floating overlay, voice entry point, progress panel
+└── ui/            MainActivity (setup + debug console, Compose), AgentViewModel
 ```
 
 ## Setup
@@ -143,6 +153,16 @@ follow once it runs against real tasks.
 - **`uiautomator dump` fights with your service.** Running it while the agent service is enabled
   causes AccessibilityManagerService to disconnect and rebind third-party services. Use
   `adb exec-out screencap` and fixed coordinates for scripted testing instead.
+- **An overlay is allowed, but the system can still veto it.** The bubble renders over the launcher
+  and ordinary apps, yet over Settings it vanished. The window was alive and correctly placed; the
+  dump showed `mForceHideNonSystemOverlayWindow=true` and therefore `isVisible=false`. Screens that
+  handle sensitive input can ask the window manager to hide every non-system overlay, which kills
+  tapjacking as a class. So the honest framing is not "Android lets apps draw anywhere" but "Android
+  lets apps draw anywhere the screen underneath has not objected".
+- **Foreground service types are load-bearing.** A service that opens the mic must declare
+  `foregroundServiceType="microphone"` and hold `FOREGROUND_SERVICE_MICROPHONE`, and `adb` cannot
+  start a non-exported one for you (`Requires permission not exported from uid ...`) — the tap has
+  to come from the app.
 - **Toolchain notes.** Android Studio 2026.1 bundles JBR 25; Gradle 8.14 wants a 17–24 JDK for the
   daemon, so the wrapper is pointed at Homebrew's `openjdk@17` through `~/.gradle/gradle.properties`.
   The wrapper *launcher* still needs `java` on `PATH` or `JAVA_HOME` in non-interactive shells.
@@ -158,6 +178,12 @@ Be precise, so:
   time and read-only. **Narrower, UX-level gap.**
 - **Being the assistant:** no equivalent of `ROLE_ASSISTANT`; Siri is not replaceable. **Policy +
   architecture.**
+- **Floating UI over other apps:** iOS has no third-party equivalent. Picture-in-Picture is the only
+  thing an app may leave on screen, it carries video only, and it belongs to the app that started it.
+  **API-level gap.**
+- **Speech to text:** both platforms expose it (`SFSpeechRecognizer` vs `SpeechRecognizer`). The
+  difference is structural rather than capability: on Android the recogniser is a swappable system
+  role, so the same call can be served by Google's engine, the OEM's, or yours.
 - **Being operated by an assistant:** iOS is arguably ahead here — App Intents give Siri and Shortcuts
   a typed, first-class way to call into apps. Android's App Actions are Google Assistant-only.
 - **Prototyping the same loop on iOS:** entirely feasible on a personal device with WebDriverAgent
@@ -183,10 +209,10 @@ Be precise, so:
 
 ## Verdict
 
-Half earned. The platform half — read another app's UI, act on it, stay alive — works exactly as the
-docs promise and took an evening. The agent half is where the real experiment starts: steps per task,
-failure modes per app, how often the screenshot fallback is needed. This section gets rewritten after
-those runs.
+Half earned. The platform half — read another app's UI, act on it, float above it, stay alive — works
+exactly as the docs promise and took an evening. The agent half is where the real experiment starts:
+steps per task, failure modes per app, how often the screenshot fallback is needed. This section gets
+rewritten after those runs.
 
 ---
 

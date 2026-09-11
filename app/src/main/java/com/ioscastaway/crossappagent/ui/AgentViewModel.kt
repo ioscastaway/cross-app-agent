@@ -2,14 +2,14 @@ package com.ioscastaway.crossappagent.ui
 
 import android.app.Application
 import android.content.ComponentName
-import android.content.Context
 import android.provider.Settings
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.anthropic.client.AnthropicClient
-import com.anthropic.client.okhttp.AnthropicOkHttpClient
 import com.ioscastaway.crossappagent.BuildConfig
 import com.ioscastaway.crossappagent.agent.AgentEvent
+import com.ioscastaway.crossappagent.agent.ApiKeySource
+import com.ioscastaway.crossappagent.agent.ApiKeyStore
 import com.ioscastaway.crossappagent.agent.ClaudeAgent
 import com.ioscastaway.crossappagent.platform.AccessibilityDeviceController
 import com.ioscastaway.crossappagent.platform.AgentAccessibilityService
@@ -25,8 +25,6 @@ import kotlinx.coroutines.launch
 data class LogLine(val kind: Kind, val text: String) {
     enum class Kind { THOUGHT, TOOL, RESULT, ERROR, DONE, SCREEN }
 }
-
-enum class ApiKeySource { NONE, BUILD, IN_APP }
 
 data class AgentUiState(
     val serviceBound: Boolean = false,
@@ -49,10 +47,6 @@ class AgentViewModel(app: Application) : AndroidViewModel(app) {
     private val device = AccessibilityDeviceController(app) { AgentAccessibilityService.instance.value }
     private var job: Job? = null
 
-    // Dev-console convenience: the key can be pasted into the app instead of local.properties.
-    // Plain SharedPreferences on a debug build of an experiment; not a pattern for a shipping app.
-    private val prefs = app.getSharedPreferences("agent", Context.MODE_PRIVATE)
-
     init {
         viewModelScope.launch {
             AgentAccessibilityService.instance.collect { svc ->
@@ -65,28 +59,19 @@ class AgentViewModel(app: Application) : AndroidViewModel(app) {
 
     // ---------------------------------------------------------------- api key
 
-    private fun inAppKey(): String? = prefs.getString(PREF_API_KEY, null)?.trim()?.takeIf { it.isNotBlank() }
-
-    private fun apiKeySource(): ApiKeySource = when {
-        inAppKey() != null -> ApiKeySource.IN_APP
-        BuildConfig.ANTHROPIC_API_KEY.isNotBlank() -> ApiKeySource.BUILD
-        else -> ApiKeySource.NONE
-    }
-
-    private fun effectiveKey(): String = inAppKey() ?: BuildConfig.ANTHROPIC_API_KEY
+    private fun apiKeySource(): ApiKeySource = ApiKeyStore.source(getApplication())
 
     fun saveApiKey(key: String) {
-        prefs.edit().putString(PREF_API_KEY, key.trim()).apply()
+        ApiKeyStore.save(getApplication(), key)
         _state.update { it.copy(apiKeySource = apiKeySource()) }
     }
 
     fun clearApiKey() {
-        prefs.edit().remove(PREF_API_KEY).apply()
+        ApiKeyStore.clear(getApplication())
         _state.update { it.copy(apiKeySource = apiKeySource()) }
     }
 
-    private fun newClient(): AnthropicClient =
-        AnthropicOkHttpClient.builder().apiKey(effectiveKey()).build()
+    private fun newClient(): AnthropicClient? = ApiKeyStore.client(getApplication())
 
     // ---------------------------------------------------------------- service status
 
@@ -121,7 +106,12 @@ class AgentViewModel(app: Application) : AndroidViewModel(app) {
         if (task.isEmpty() || _state.value.running || !_state.value.apiKeyPresent) return
         _state.update { it.copy(running = true, log = emptyList(), pendingQuestion = null) }
 
-        val agent = ClaudeAgent(newClient(), device, BuildConfig.CLAUDE_MODEL)
+        val client = newClient() ?: run {
+            _state.update { it.copy(running = false) }
+            log(LogLine.Kind.ERROR, "No API key configured")
+            return
+        }
+        val agent = ClaudeAgent(client, device, BuildConfig.CLAUDE_MODEL)
         job = viewModelScope.launch(Dispatchers.Default) {
             agent.run(task).collect { ev ->
                 when (ev) {
@@ -154,8 +144,4 @@ class AgentViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun log(kind: LogLine.Kind, text: String) =
         _state.update { it.copy(log = it.log + LogLine(kind, text)) }
-
-    private companion object {
-        const val PREF_API_KEY = "anthropic_api_key"
-    }
 }
