@@ -39,9 +39,17 @@ Series: Android × AI (primary), Things Apple Would Never Let Me Do (secondary).
 
 ## Local environment (this Mac, set up 2026-09-11)
 
-- JDK for Gradle: `/opt/homebrew/opt/openjdk@17/...` via `~/.gradle/gradle.properties`
-  (`org.gradle.java.home`). In non-interactive shells also `export JAVA_HOME=$(/usr/libexec/java_home 2>/dev/null || echo /opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home)`
-  before `./gradlew`, or the wrapper launcher fails with "Unable to locate a Java Runtime".
+- JDK for Gradle: **21** (`/opt/homebrew/opt/openjdk@21/...`, Homebrew formula — the Temurin cask
+  needs sudo). Gradle 8.14 accepts JDK 8–24, so Android Studio's bundled JBR 25 cannot run the daemon
+  and the IDE refuses to sync with it. One source of truth: `org.gradle.java.home` in
+  `~/.gradle/gradle.properties`, which the IDE picks up because `.idea/gradle.xml` sets
+  `gradleJvm` to `#GRADLE_LOCAL_JAVA_HOME`. `.idea/` is git-ignored, so a fresh clone has to set the
+  Gradle JDK again (Settings → Build Tools → Gradle → Gradle JDK).
+- This is the JDK that *runs* Gradle. It is independent of `compileOptions` / `jvmTarget`, which stay
+  at **17** — D8/R8 desugaring does not accept Java 21 bytecode for app code.
+- In non-interactive shells `JAVA_HOME` may be unset; `export JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home`
+  (or put its `bin` on `PATH`) before `./gradlew`, or the wrapper launcher fails with
+  "Unable to locate a Java Runtime".
 - SDK: `~/Library/Android/sdk` (platform 36, build-tools 36.0.0 + 35.0.0, platform-tools, emulator).
   `ANDROID_HOME`, `JAVA_HOME`, and `PATH` are exported in `~/.zshrc`.
 - Emulator: AVD `agent_api36` (Pixel 8, Android 16 google_apis arm64).
