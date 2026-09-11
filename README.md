@@ -71,6 +71,10 @@ setup and a debug console.
 4. Two safety layers: the system prompt requires `ask_user` before irreversible actions, and the
    loop independently intercepts taps on nodes whose label looks like send / pay / delete and asks
    the user first.
+5. `ask_user` takes optional `options`. A confirmation arrives with them and renders as buttons; an
+   open question ("which video?", "how much?") arrives without them and is answered by speaking. The
+   microphone stays available either way, because the real answer is sometimes none of the offered
+   ones.
 5. Password fields are redacted in the serializer before anything is sent anywhere.
 
 Later phases, in order: spoken replies (TTS) → `ROLE_ASSISTANT` + `VoiceInteractionService` so the

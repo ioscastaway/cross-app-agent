@@ -203,11 +203,27 @@ fun AgentScreen(vm: AgentViewModel = viewModel()) {
                 Column {
                     Text(q.question)
                     Spacer(Modifier.height(8.dp))
-                    OutlinedTextField(value = answer, onValueChange = { answer = it }, singleLine = true)
+                    // Buttons only for the answers the model actually offered; open questions get
+                    // the text field alone rather than a misleading yes/no.
+                    q.options.forEach { option ->
+                        OutlinedButton(
+                            onClick = { vm.answer(option) },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) { Text(option) }
+                    }
+                    if (q.options.isNotEmpty()) Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = answer,
+                        onValueChange = { answer = it },
+                        label = { Text("Type an answer") },
+                        singleLine = true,
+                    )
                 }
             },
-            confirmButton = { TextButton(onClick = { vm.answer(answer.ifBlank { "yes" }) }) { Text("Answer") } },
-            dismissButton = { TextButton(onClick = { vm.answer("no") }) { Text("No") } },
+            confirmButton = {
+                TextButton(onClick = { vm.answer(answer) }, enabled = answer.isNotBlank()) { Text("Send") }
+            },
+            dismissButton = { TextButton(onClick = { vm.stop() }) { Text("Cancel task") } },
         )
     }
 }

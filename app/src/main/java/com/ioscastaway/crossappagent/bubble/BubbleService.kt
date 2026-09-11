@@ -95,6 +95,7 @@ class BubbleService : Service() {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var work: Job? = null
+    private var answerWork: Job? = null
     private var pendingQuestion: AgentEvent.Question? = null
 
     private var state = State.IDLE
@@ -133,6 +134,7 @@ class BubbleService : Service() {
     override fun onDestroy() {
         isRunning = false
         work?.cancel()
+        answerWork?.cancel()
         scope.cancel()
         runCatching { windowManager.removeView(bubble) }
         if (panelShown) runCatching { windowManager.removeView(panel) }
@@ -374,12 +376,22 @@ class BubbleService : Service() {
             return
         }
         val ctx: Context = android.view.ContextThemeWrapper(this, android.R.style.Theme_Material)
+        val stacked = pairs.size > 2
+        buttonRow.orientation = if (stacked) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL
         for ((label, action) in pairs) {
             buttonRow.addView(
                 Button(ctx).apply {
                     text = label
+                    isAllCaps = false
                     setOnClickListener { action() }
-                    layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+                    layoutParams = if (stacked) {
+                        LinearLayout.LayoutParams(
+                            LinearLayout.LayoutParams.MATCH_PARENT,
+                            LinearLayout.LayoutParams.WRAP_CONTENT,
+                        )
+                    } else {
+                        LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+                    }
                 }
             )
         }
@@ -398,6 +410,8 @@ class BubbleService : Service() {
 
     private fun cancelWork() {
         work?.cancel()
+        answerWork?.cancel()
+        answerWork = null
         pendingQuestion?.answer?.cancel()
         pendingQuestion = null
         state = State.IDLE
@@ -475,13 +489,55 @@ class BubbleService : Service() {
         state = State.ASKING
         showPanel()
         status(q.question)
-        buttons(
-            getString(R.string.bubble_yes) to { answer("yes") },
-            getString(R.string.bubble_no) to { answer("no") },
-        )
+        offerAnswers(q)
+    }
+
+    /**
+     * One button per answer the model expects, plus a microphone for everything else.
+     *
+     * An open question ("which video?", "how much?") arrives with no options, so speaking is the only
+     * way to answer it — which is the right default for a voice product anyway. A closed question
+     * still keeps the microphone, because the real answer is sometimes none of the offered ones.
+     */
+    private fun offerAnswers(q: AgentEvent.Question) {
+        val actions = buildList<Pair<String, () -> Unit>> {
+            q.options.take(3).forEach { option -> add(option to { answer(option) }) }
+            add(getString(R.string.bubble_speak) to { listenForAnswer(q) })
+        }
+        buttons(*actions.toTypedArray())
+    }
+
+    private fun listenForAnswer(q: AgentEvent.Question) {
+        answerWork?.cancel()
+        buttons()
+        state = State.LISTENING
+        status(getString(R.string.bubble_listening))
+        answerWork = scope.launch {
+            var heard: String? = null
+            voice.listen().collect { ev ->
+                when (ev) {
+                    is VoiceRecognizer.Event.Listening -> status(getString(R.string.bubble_listening))
+                    is VoiceRecognizer.Event.Partial -> status(ev.text)
+                    is VoiceRecognizer.Event.Final -> heard = ev.text
+                    is VoiceRecognizer.Event.Failed -> {
+                        status(ev.reason)
+                        delay(1500)
+                        // Put the question back rather than answering something the user did not say.
+                        if (pendingQuestion === q) {
+                            state = State.ASKING
+                            status(q.question)
+                            offerAnswers(q)
+                        }
+                    }
+                }
+            }
+            heard?.let { answer(it) }
+        }
     }
 
     private fun answer(text: String) {
+        answerWork?.cancel()
+        answerWork = null
         pendingQuestion?.answer?.complete(text)
         pendingQuestion = null
         buttons()

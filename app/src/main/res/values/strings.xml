@@ -21,8 +21,7 @@
     <string name="bubble_thinking">Looking at the screen</string>
     <string name="bubble_cancelled">Cancelled</string>
     <string name="bubble_you">You</string>
-    <string name="bubble_yes">Yes</string>
-    <string name="bubble_no">No</string>
+    <string name="bubble_speak">Speak an answer</string>
     <string name="bubble_need_accessibility">Turn on the accessibility service first</string>
     <string name="bubble_need_key">This build has no API key</string>
 </resources>
