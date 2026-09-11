@@ -1,0 +1,18 @@
+# Secrets and machine-local config
+local.properties
+
+# Gradle
+.gradle/
+build/
+.kotlin/
+
+# IDE
+.idea/
+*.iml
+.DS_Store
+captures/
+.externalNativeBuild/
+.cxx/
+
+# Author's private notes (Korean working notes stay out of the public repo)
+notes/

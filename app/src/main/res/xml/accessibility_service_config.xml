@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Capabilities requested from the system. Each one maps to a Settings toggle the user sees.
+
+    canRetrieveWindowContent  -> read the AccessibilityNodeInfo tree of other apps
+    canPerformGestures        -> dispatchGesture() for taps/swipes as a coordinate fallback
+    canTakeScreenshot         -> takeScreenshot() (API 30+) for the multimodal fallback
+    flagReportViewIds         -> include resource ids (com.app:id/send) in nodes; stable anchors for macros
+    flagRetrieveInteractiveWindows -> see multiple windows (IME, dialogs), not just the active one
+    flagIncludeNotImportantViews   -> include views marked importantForAccessibility=no; useful for layout context
+
+    isAccessibilityTool is deliberately NOT set: this service is not an assistive tool for people with
+    disabilities, so it should not receive views marked accessibilityDataSensitive (API 34+).
+-->
+<accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:description="@string/accessibility_service_description"
+    android:accessibilityEventTypes="typeWindowStateChanged|typeWindowContentChanged|typeWindowsChanged"
+    android:accessibilityFeedbackType="feedbackGeneric"
+    android:accessibilityFlags="flagDefault|flagReportViewIds|flagRetrieveInteractiveWindows|flagIncludeNotImportantViews"
+    android:canRetrieveWindowContent="true"
+    android:canPerformGestures="true"
+    android:canTakeScreenshot="true"
+    android:notificationTimeout="100"
+    android:settingsActivity="com.ioscastaway.crossappagent.ui.MainActivity" />

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Cross-App Agent</string>
+    <string name="accessibility_service_label">Cross-App Agent (screen reader for the agent)</string>
+    <string name="accessibility_service_description">
+        Lets the Cross-App Agent read the on-screen UI tree of other apps and perform taps, text input and
+        scrolls on your behalf while you run a task. Screen content is sent to a cloud model only while a task is
+        running. Password fields are redacted before anything leaves the device. This is an engineering experiment,
+        not an assistive technology.
+    </string>
+</resources>
