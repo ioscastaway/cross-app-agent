@@ -16,3 +16,7 @@ resized to 256 px and renamed. Nothing else was changed.
 | `face_asking.png` | Robot |
 | `face_done.png` | Thumbs up |
 | `face_failed.png` | Confused face |
+
+The launcher icon reuses the same waving hand: `mipmap-*/ic_launcher_foreground.png` and the
+monochrome layer are that emoji, composited over a gradient generated in this repository. The
+gradient and the icon layout are original; the hand is Microsoft's, under the same MIT licence.
