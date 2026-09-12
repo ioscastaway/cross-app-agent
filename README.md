@@ -8,7 +8,7 @@ screen through the accessibility tree, decides what to tap, and keeps going unti
 > On iOS, no. Here, apparently yes. So naturally, I decided to rationalize the decision through engineering.
 
 **Series:** Android × AI · Things Apple Would Never Let Me Do
-**Status:** builds, JVM tests pass. Cross-app tree reading, the floating bubble, and one full agent run are verified on an Android 16 emulator. Speech input and real-device behaviour are still unverified.
+**Status:** working on a Galaxy Z Fold 8 (One UI 9.0, Android 17): Korean speech in, bubble over any app, end-to-end runs such as "유튜브에서 하츠투하츠 뮤직비디오 틀어줘" opening YouTube and tapping the right video. JVM tests pass.
 
 ## Why I built this
 
@@ -54,8 +54,9 @@ failure. The launcher icon is the same cat, so the thing you tap and the thing t
 recognisably one character.
 There is no disc behind it — the artwork is a cut-out and stands on its own, with a contact shadow
 that tightens as it bobs so it reads as hovering rather than pasted on. Drag it anywhere and it
-snaps to the nearest edge; long-press dismisses it. A small panel under it streams what the agent
-is doing. The app's own screen is now just setup and a debug console.
+snaps to the nearest edge; press and hold and it offers a **Close** button (a release-time long
+press turned out to be too easy to miss, so the hold is decided by a timer while the finger is
+still down). A small panel under it streams what the agent is doing. The app's own screen is now just setup and a debug console.
 
 The art was generated for this project, which is the only reason it can live in a public
 repository. The first version of this bubble borrowed a commercial sticker set, and however good it

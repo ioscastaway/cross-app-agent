@@ -6,6 +6,7 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import com.ioscastaway.crossappagent.BuildConfig
 import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -61,6 +62,13 @@ import com.ioscastaway.crossappagent.bubble.BubbleService
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Debug builds: `adb shell am start -n <pkg>/.ui.MainActivity --ez start_bubble true` brings the
+        // bubble up without a tap, so a reinstall does not need a hand on the phone.
+        if (BuildConfig.DEBUG && intent?.getBooleanExtra("start_bubble", false) == true &&
+            android.provider.Settings.canDrawOverlays(this)
+        ) {
+            com.ioscastaway.crossappagent.bubble.BubbleService.start(this)
+        }
         enableEdgeToEdge()
         setContent { MaterialTheme { AgentScreen() } }
     }

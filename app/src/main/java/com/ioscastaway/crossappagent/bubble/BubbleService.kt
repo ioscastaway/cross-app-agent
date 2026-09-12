@@ -16,6 +16,7 @@ import android.graphics.drawable.GradientDrawable
 import android.os.Build
 import android.os.IBinder
 import android.view.Gravity
+import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewConfiguration
@@ -210,10 +211,18 @@ class BubbleService : Service() {
 
     private fun attachDragAndTap(size: Int) {
         val slop = ViewConfiguration.get(this).scaledTouchSlop
+        val longPressMs = ViewConfiguration.getLongPressTimeout().toLong()
         var downX = 0f; var downY = 0f
         var startX = 0; var startY = 0
         var dragging = false
-        var downAt = 0L
+        var longPressed = false
+        // Long press is decided by a timer while the finger is still down — not on release — so the
+        // menu appears under the finger and a slightly wobbly hold still counts as a hold.
+        val longPress = Runnable {
+            longPressed = true
+            bubble.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+            offerClose()
+        }
 
         bubble.setOnTouchListener { _, event ->
             when (event.actionMasked) {
@@ -221,14 +230,18 @@ class BubbleService : Service() {
                     downX = event.rawX; downY = event.rawY
                     startX = bubbleParams.x; startY = bubbleParams.y
                     dragging = false
-                    downAt = System.currentTimeMillis()
+                    longPressed = false
+                    bubble.postDelayed(longPress, longPressMs)
                     true
                 }
 
                 MotionEvent.ACTION_MOVE -> {
                     val dx = event.rawX - downX
                     val dy = event.rawY - downY
-                    if (!dragging && (abs(dx) > slop || abs(dy) > slop)) dragging = true
+                    if (!dragging && !longPressed && (abs(dx) > slop || abs(dy) > slop)) {
+                        dragging = true
+                        bubble.removeCallbacks(longPress)
+                    }
                     if (dragging) {
                         bubbleParams.x = (startX + dx).roundToInt()
                             .coerceIn(0, screenWidth() - size)
@@ -241,12 +254,11 @@ class BubbleService : Service() {
                 }
 
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                    if (dragging) {
-                        snapToEdge(size)
-                    } else if (System.currentTimeMillis() - downAt > 600) {
-                        stopSelf()   // long press dismisses the bubble
-                    } else {
-                        onTap()
+                    bubble.removeCallbacks(longPress)
+                    when {
+                        dragging -> snapToEdge(size)
+                        longPressed -> Unit                       // the menu is already up
+                        event.actionMasked == MotionEvent.ACTION_UP -> onTap()
                     }
                     true
                 }
@@ -254,6 +266,23 @@ class BubbleService : Service() {
                 else -> false
             }
         }
+    }
+
+    /** Long press: offer to close the bubble (which also aborts anything the agent is doing). */
+    private fun offerClose() {
+        showPanel()
+        status(getString(R.string.bubble_close_prompt))
+        buttons(
+            getString(R.string.bubble_close) to { stopSelf() },
+            getString(R.string.bubble_keep) to {
+                buttons()
+                when (state) {
+                    State.ASKING -> pendingQuestion?.let { status(it.question); offerAnswers(it) }
+                    State.IDLE -> hidePanel()
+                    else -> Unit
+                }
+            },
+        )
     }
 
     private fun dockX(size: Int): Int =

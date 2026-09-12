@@ -15,13 +15,16 @@
     <string name="bubble_notification_title">Agent bubble is on</string>
     <string name="bubble_notification_text">Tap the bubble and say what you want done</string>
     <string name="bubble_stop">Stop</string>
-    <string name="bubble_content_description">Agent bubble. Tap to speak, long press to dismiss.</string>
+    <string name="bubble_content_description">Agent bubble. Tap to speak, press and hold to close.</string>
 
     <string name="bubble_listening">Listening…</string>
     <string name="bubble_thinking">Looking at the screen</string>
     <string name="bubble_cancelled">Cancelled</string>
     <string name="bubble_you">You</string>
     <string name="bubble_speak">Speak an answer</string>
+    <string name="bubble_close_prompt">Close the bubble?</string>
+    <string name="bubble_close">Close</string>
+    <string name="bubble_keep">Keep</string>
     <string name="bubble_need_accessibility">Turn on the accessibility service first</string>
     <string name="bubble_need_key">This build has no API key</string>
 </resources>
