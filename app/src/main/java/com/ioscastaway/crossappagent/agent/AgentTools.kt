@@ -98,8 +98,20 @@ object AgentTools {
         tool(
             ASK_USER,
             "Ask the user a question and wait for the answer. Required before any irreversible action " +
-                "(sending, paying, deleting, posting) and whenever the task is ambiguous.",
-            mapOf("question" to prop("string", "A short, specific question")),
+                "(sending, paying, deleting, posting) and whenever the task is ambiguous. Ask in the " +
+                "language the user used.",
+            mapOf(
+                "question" to prop("string", "A short, specific question"),
+                "options" to mapOf(
+                    "type" to "array",
+                    "items" to mapOf("type" to "string"),
+                    "description" to "The answers you expect, when the answer is a small closed set: " +
+                        "a confirmation, or a choice between things already on screen. Each option is a " +
+                        "button, so keep them under about 20 characters and in the user's language. " +
+                        "Omit this entirely when the answer is open — a name, an amount, a search term — " +
+                        "and the user will speak or type it instead. Never invent options for an open question.",
+                ),
+            ),
             required = listOf("question"),
         ),
         tool(

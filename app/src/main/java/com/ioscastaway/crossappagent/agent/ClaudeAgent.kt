@@ -236,7 +236,10 @@ class ClaudeAgent(
                 }
 
                 AgentTools.ASK_USER -> {
-                    val answer = ask(input.str("question") ?: "Please clarify.")
+                    val answer = ask(
+                        question = input.str("question") ?: "Please clarify.",
+                        options = input.strings("options"),
+                    )
                     text(true, "User answered: $answer")
                 }
 
@@ -256,9 +259,12 @@ class ClaudeAgent(
         }
     }
 
-    private suspend fun ProducerScope<AgentEvent>.ask(question: String): String {
+    private suspend fun ProducerScope<AgentEvent>.ask(
+        question: String,
+        options: List<String> = emptyList(),
+    ): String {
         val deferred = CompletableDeferred<String>()
-        send(AgentEvent.Question(question, deferred))
+        send(AgentEvent.Question(question, options, deferred))
         return deferred.await()
     }
 
@@ -270,8 +276,14 @@ class ClaudeAgent(
         val node = device.lastScreen()?.uiNode(ref) ?: return true
         val label = listOfNotNull(node.text, node.contentDescription, node.resourceId).joinToString(" ").lowercase()
         if (label.isBlank() || RISKY.none { label.contains(it) }) return true
-        val answer = ask("About to tap \"${label.take(40)}\". This may be irreversible. Proceed? (yes/no)")
-        return answer.trim().lowercase().let { it.startsWith("y") || it == "ok" || it == "네" || it == "응" || it == "예" }
+        // This one really is a yes/no, so it supplies its own options instead of leaving it open.
+        val answer = ask(
+            question = "About to tap \"${label.take(40)}\". This may be irreversible. Proceed?",
+            options = listOf("Yes", "No"),
+        )
+        return answer.trim().lowercase().let {
+            it.startsWith("y") || it == "ok" || it == "네" || it == "응" || it == "예" || it == "확인"
+        }
     }
 
     // ---------------------------------------------------------------- helpers
@@ -279,6 +291,11 @@ class ClaudeAgent(
     private fun Map<String, JsonValue>.str(key: String): String? = this[key]?.asString()?.getOrNull()
     private fun Map<String, JsonValue>.int(key: String): Int? = this[key]?.asNumber()?.getOrNull()?.toInt()
     private fun Map<String, JsonValue>.bool(key: String): Boolean? = this[key]?.asBoolean()?.getOrNull()
+
+    private fun Map<String, JsonValue>.strings(key: String): List<String> =
+        this[key]?.asArray()?.getOrNull()
+            ?.mapNotNull { it.asString().getOrNull()?.trim()?.takeIf(String::isNotEmpty) }
+            ?: emptyList()
 
     companion object {
         private val RISKY = listOf(
@@ -304,7 +321,9 @@ class ClaudeAgent(
             3. After each action you receive the new screen. Verify the effect before the next step.
             4. If the node list is empty or the target is an unlabelled image, take a screenshot and use tap_at.
             5. If something unexpected appears (dialog, permission prompt, login), handle it or ask_user.
-            6. Never guess personal data (recipients, amounts, addresses). ask_user instead.
+            6. Never guess personal data (recipients, amounts, addresses). ask_user instead. Pass `options`
+               only when the answer really is a small closed set; for anything open-ended leave it out so
+               the user can speak a free answer.
             7. Before any irreversible action — sending a message, paying, ordering, deleting, posting —
                call ask_user and proceed only on a clear yes.
             8. Do not loop: if the same action fails twice, change approach or report failure.

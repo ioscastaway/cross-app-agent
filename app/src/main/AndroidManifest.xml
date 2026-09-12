@@ -4,6 +4,15 @@
     <!-- Cloud model calls. Screen content only leaves the device when the agent is running a task. -->
     <uses-permission android:name="android.permission.INTERNET" />
 
+    <!-- The floating bubble. Granted by the user in Settings, not at runtime. -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+
+    <!-- Voice input, and the foreground service that keeps the bubble alive while it listens. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
     <!--
         Package visibility (API 30+): we only need to see apps that have a launcher activity so the
         agent can open them by name. No QUERY_ALL_PACKAGES.
@@ -13,11 +22,17 @@
             <action android:name="android.intent.action.MAIN" />
             <category android:name="android.intent.category.LAUNCHER" />
         </intent>
+        <!-- Whichever app holds the RecognitionService role does the speech-to-text. -->
+        <intent>
+            <action android:name="android.speech.RecognitionService" />
+        </intent>
     </queries>
 
     <application
         android:name=".App"
         android:allowBackup="false"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
         android:label="@string/app_name"
         android:supportsRtl="true"
         android:theme="@style/Theme.CrossAppAgent">
@@ -31,6 +46,15 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!--
+            Draws the floating bubble over other apps and runs the agent from it. Foreground so the
+            system keeps it alive; type "microphone" because tapping the bubble opens the mic.
+        -->
+        <service
+            android:name=".bubble.BubbleService"
+            android:exported="false"
+            android:foregroundServiceType="microphone" />
 
         <!--
             The core of the experiment. The system (AccessibilityManagerService) binds this service

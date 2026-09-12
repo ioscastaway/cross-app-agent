@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Cross-App Agent</string>
+
     <string name="accessibility_service_label">Cross-App Agent (screen reader for the agent)</string>
     <string name="accessibility_service_description">
         Lets the Cross-App Agent read the on-screen UI tree of other apps and perform taps, text input and
@@ -8,4 +9,22 @@
         running. Password fields are redacted before anything leaves the device. This is an engineering experiment,
         not an assistive technology.
     </string>
+
+    <string name="bubble_channel_name">Agent bubble</string>
+    <string name="bubble_channel_description">Keeps the floating agent bubble alive</string>
+    <string name="bubble_notification_title">Agent bubble is on</string>
+    <string name="bubble_notification_text">Tap the bubble and say what you want done</string>
+    <string name="bubble_stop">Stop</string>
+    <string name="bubble_content_description">Agent bubble. Tap to speak, press and hold to close.</string>
+
+    <string name="bubble_listening">Listening…</string>
+    <string name="bubble_thinking">Looking at the screen</string>
+    <string name="bubble_cancelled">Cancelled</string>
+    <string name="bubble_you">You</string>
+    <string name="bubble_speak">Speak an answer</string>
+    <string name="bubble_close_prompt">Close the bubble?</string>
+    <string name="bubble_close">Close</string>
+    <string name="bubble_keep">Keep</string>
+    <string name="bubble_need_accessibility">Turn on the accessibility service first</string>
+    <string name="bubble_need_key">This build has no API key</string>
 </resources>

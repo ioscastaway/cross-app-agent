@@ -1,6 +1,6 @@
 # cross-app-agent
 
-A voice-less (for now) phone agent: give it a task in plain language, and it reads whatever app is on
+A circle that floats over every app. Tap it, say what you want, and it reads whatever app is on
 screen through the accessibility tree, decides what to tap, and keeps going until the job is done.
 
 > First experiment after crash-landing on Planet Android. I wanted to know whether the thing Siri
@@ -8,7 +8,7 @@ screen through the accessibility tree, decides what to tap, and keeps going unti
 > On iOS, no. Here, apparently yes. So naturally, I decided to rationalize the decision through engineering.
 
 **Series:** Android × AI · Things Apple Would Never Let Me Do
-**Status:** builds, JVM tests pass, cross-app tree reading verified on an Android 16 emulator. The model loop itself has not been run yet (no API key on the build machine).
+**Status:** working on a Galaxy Z Fold 8 (One UI 9.0, Android 17): Korean speech in, bubble over any app, end-to-end runs such as "유튜브에서 하츠투하츠 뮤직비디오 틀어줘" opening YouTube and tapping the right video. JVM tests pass.
 
 ## Why I built this
 
@@ -38,6 +38,8 @@ So the iOS brain says: an agent that operates other apps is a platform feature, 
 | Back / Home | `performGlobalAction` | |
 | Launch apps from the background | `startActivity` from a system-bound service | Apps with an enabled accessibility service are exempt from Android 10+ background-start restrictions |
 | Know which apps exist | `PackageManager.queryIntentActivities` + `<queries>` | No `QUERY_ALL_PACKAGES` |
+| Float UI over every app | `TYPE_APPLICATION_OVERLAY` + `SYSTEM_ALERT_WINDOW` | The chat-head capability; user grants it in Settings |
+| Voice input | `SpeechRecognizer` | The recogniser itself is a replaceable system component |
 
 The user must enable the service by hand in *Settings › Accessibility*. There is no API to enable it,
 and on Android 13+ sideloaded apps have to pass an extra "restricted settings" step. That friction is
@@ -45,9 +47,27 @@ the product: the OS is making the user, not the developer, decide.
 
 ## Experiment
 
-Phase 1 (this commit): text task → Claude tool-use loop → accessibility tree in, actions out.
+**The surface.** A pixel-art cat floats on top of whatever you are using, in one of six poses:
+waving at rest, holding a microphone while listening, watching an hourglass while it drives the
+phone, raising a question mark when it needs an answer, sunglasses and a tick on success, a cross on
+failure. The launcher icon is the same cat, so the thing you tap and the thing that floats are
+recognisably one character.
+There is no disc behind it — the artwork is a cut-out and stands on its own, with a contact shadow
+that tightens as it bobs so it reads as hovering rather than pasted on. Drag it anywhere and it
+snaps to the nearest edge; press and hold and it offers a **Close** button (a release-time long
+press turned out to be too easy to miss, so the hold is decided by a timer while the finger is
+still down). A small panel under it streams what the agent is doing. The app's own screen is now just setup and a debug console.
 
-1. The service flattens the active window's node tree into a compact text listing with `[ref]`
+The art was generated for this project, which is the only reason it can live in a public
+repository. The first version of this bubble borrowed a commercial sticker set, and however good it
+looked, committing it would have been infringement. To swap in different art, drop `idle.png`,
+`listening.png`, `working.png`, `asking.png`, `done.png` and `failed.png` into
+`Android/data/com.ioscastaway.crossappagent/files/bubble/` on the device. Those files stay on the
+phone and never enter this repository.
+
+**The loop.** Text or speech task → Claude tool-use loop → accessibility tree in, actions out.
+
+1. The accessibility service flattens the active window's node tree into a compact text listing with `[ref]`
    handles — the Android analogue of a DOM read with `ref_N` ids:
    ```
    app: com.google.android.apps.messaging
@@ -63,11 +83,16 @@ Phase 1 (this commit): text task → Claude tool-use loop → accessibility tree
 4. Two safety layers: the system prompt requires `ask_user` before irreversible actions, and the
    loop independently intercepts taps on nodes whose label looks like send / pay / delete and asks
    the user first.
+5. `ask_user` takes optional `options`. A confirmation arrives with them and renders as buttons; an
+   open question ("which video?", "how much?") arrives without them and is answered by speaking. The
+   microphone stays available either way, because the real answer is sometimes none of the offered
+   ones.
 5. Password fields are redacted in the serializer before anything is sent anywhere.
 
-Later phases, in order: overlay progress bubble → voice entry point (`ROLE_ASSISTANT` +
-`VoiceInteractionService`, `SpeechRecognizer`, TTS) → Set-of-Marks screenshots → macro cache that
-replays known trajectories without the model → on-device intent router.
+Later phases, in order: spoken replies (TTS) → `ROLE_ASSISTANT` + `VoiceInteractionService` so the
+power button and "hey" wake word reach this agent instead of the stock one → Set-of-Marks
+screenshots → macro cache that replays known trajectories without the model → on-device intent
+router for the cases that never need the cloud.
 
 ## Architecture
 
@@ -86,9 +111,10 @@ replays known trajectories without the model → on-device intent router.
 
 ```
 app/src/main/java/com/ioscastaway/crossappagent/
-├── platform/      AgentAccessibilityService, tree reader, serializer, DeviceController
-├── agent/         ClaudeAgent (loop), AgentTools (schemas), AgentEvent
-└── ui/            MainActivity (Compose), AgentViewModel
+├── platform/      AgentAccessibilityService, tree reader, serializer, DeviceController, VoiceRecognizer
+├── agent/         ClaudeAgent (loop), AgentTools (schemas), AgentEvent, ApiKeyStore
+├── bubble/        BubbleService — the floating overlay, voice entry point, progress panel
+└── ui/            MainActivity (setup + debug console, Compose), AgentViewModel
 ```
 
 ## Setup
@@ -143,6 +169,38 @@ follow once it runs against real tasks.
 - **`uiautomator dump` fights with your service.** Running it while the agent service is enabled
   causes AccessibilityManagerService to disconnect and rebind third-party services. Use
   `adb exec-out screencap` and fixed coordinates for scripted testing instead.
+- **The loop closes.** First end-to-end run, from the debug console: one `launch_app` call, a
+  one-line check that the right screen came up, then `done`. No wasted `read_screen`, because every
+  action tool already returns the new screen in its result.
+  ```
+  → launch_app {name=Settings}
+    ✓ Launched Settings (com.android.settings)
+  💭 Settings is open.
+  → done {success=true, summary=Opened the Settings app; main settings menu is displayed.}
+  ```
+- **An overlay is allowed, but the system can still veto it.** The bubble renders over the launcher
+  and ordinary apps, yet over Settings it vanished. The window was alive and correctly placed; the
+  dump showed `mForceHideNonSystemOverlayWindow=true` and therefore `isVisible=false`. Screens that
+  handle sensitive input can ask the window manager to hide every non-system overlay, which kills
+  tapjacking as a class. So the honest framing is not "Android lets apps draw anywhere" but "Android
+  lets apps draw anywhere the screen underneath has not objected".
+- **Foreground service types are load-bearing.** A service that opens the mic must declare
+  `foregroundServiceType="microphone"` and hold `FOREGROUND_SERVICE_MICROPHONE`, and `adb` cannot
+  start a non-exported one for you (`Requires permission not exported from uid ...`) — the tap has
+  to come from the app.
+- **The recognizer is a system role, and on this Galaxy every holder of it is on-device.** The
+  default is Google's offline recognizer (`com.google.android.tts`); the other two installed are
+  also local. A small local vocabulary transcribes an unknown band name in the partial results and
+  then rewrites the final transcript without it — "유튜브에서 하츠투하츠 …" became "유튜브에서
+  뮤직비디오 틀어줘". The fix is not a better decoder but a better reader: the final transcript, the
+  N-best alternatives and the longest partial all go to the model, which is told that names it does
+  not see in the final are probably real. App labels are also passed as biasing strings (API 33+).
+- **A foldable changes its window mid-service.** The bubble's panel was measured once at start-up,
+  so a panel created unfolded stayed 2100 px wide after folding onto a 1248 px screen. Overlay
+  windows do not get recreated the way an Activity does; the Service has to handle
+  `onConfigurationChanged` itself, re-read `WindowManager.currentWindowMetrics`, clamp the bubble
+  back on screen and re-measure the panel — now capped at 380 dp so the unfolded display gets a
+  reading column, not a banner.
 - **Toolchain notes.** Android Studio 2026.1 bundles JBR 25; Gradle 8.14 wants a 17–24 JDK for the
   daemon, so the wrapper is pointed at Homebrew's `openjdk@17` through `~/.gradle/gradle.properties`.
   The wrapper *launcher* still needs `java` on `PATH` or `JAVA_HOME` in non-interactive shells.
@@ -158,6 +216,12 @@ Be precise, so:
   time and read-only. **Narrower, UX-level gap.**
 - **Being the assistant:** no equivalent of `ROLE_ASSISTANT`; Siri is not replaceable. **Policy +
   architecture.**
+- **Floating UI over other apps:** iOS has no third-party equivalent. Picture-in-Picture is the only
+  thing an app may leave on screen, it carries video only, and it belongs to the app that started it.
+  **API-level gap.**
+- **Speech to text:** both platforms expose it (`SFSpeechRecognizer` vs `SpeechRecognizer`). The
+  difference is structural rather than capability: on Android the recogniser is a swappable system
+  role, so the same call can be served by Google's engine, the OEM's, or yours.
 - **Being operated by an assistant:** iOS is arguably ahead here — App Intents give Siri and Shortcuts
   a typed, first-class way to call into apps. Android's App Actions are Google Assistant-only.
 - **Prototyping the same loop on iOS:** entirely feasible on a personal device with WebDriverAgent
@@ -183,10 +247,10 @@ Be precise, so:
 
 ## Verdict
 
-Half earned. The platform half — read another app's UI, act on it, stay alive — works exactly as the
-docs promise and took an evening. The agent half is where the real experiment starts: steps per task,
-failure modes per app, how often the screenshot fallback is needed. This section gets rewritten after
-those runs.
+Half earned. The platform half — read another app's UI, act on it, float above it, stay alive — works
+exactly as the docs promise and took an evening. The agent half is where the real experiment starts:
+steps per task, failure modes per app, how often the screenshot fallback is needed. This section gets
+rewritten after those runs.
 
 ---
 
