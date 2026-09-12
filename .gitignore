@@ -16,3 +16,7 @@ captures/
 
 # Author's private notes (Korean working notes stay out of the public repo)
 notes/
+
+# Agent guidance stays on the developer machine; the README is what a reader needs
+CLAUDE.md
+CLAUDE.local.md
