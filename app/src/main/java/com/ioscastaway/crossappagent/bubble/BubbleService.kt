@@ -8,6 +8,7 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.content.res.Configuration
 import android.content.pm.ServiceInfo
 import android.graphics.Color
 import android.graphics.PixelFormat
@@ -278,8 +279,26 @@ class BubbleService : Service() {
         }
     }
 
-    private fun screenWidth() = resources.displayMetrics.widthPixels
-    private fun screenHeight() = resources.displayMetrics.heightPixels
+    // WindowManager's metrics follow fold/unfold and rotation; a Service's displayMetrics can lag.
+    private fun screenWidth() = windowManager.currentWindowMetrics.bounds.width()
+    private fun screenHeight() = windowManager.currentWindowMetrics.bounds.height()
+
+    /** 86% of a phone screen, but never wider than a comfortable reading column on a tablet-sized display. */
+    private fun panelWidth(): Int = minOf((screenWidth() * 0.86f).roundToInt(), dp(380))
+
+    /**
+     * Fold, unfold, rotate: keep the bubble inside the new bounds and re-measure the panel.
+     * The Service gets this callback because it is not an Activity being recreated.
+     */
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        val size = bubbleParams.width
+        bubbleParams.x = bubbleParams.x.coerceIn(0, (screenWidth() - size).coerceAtLeast(0))
+        bubbleParams.y = bubbleParams.y.coerceIn(0, (screenHeight() - size).coerceAtLeast(0))
+        runCatching { windowManager.updateViewLayout(bubble, bubbleParams) }
+        panelParams.width = panelWidth()
+        if (panelShown) positionPanel()
+    }
 
     // ---------------------------------------------------------------- panel view
 
@@ -321,7 +340,7 @@ class BubbleService : Service() {
         }
 
         panelParams = WindowManager.LayoutParams(
-            (screenWidth() * 0.86f).roundToInt(),
+            panelWidth(),
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
@@ -330,8 +349,15 @@ class BubbleService : Service() {
     }
 
     private fun positionPanel() {
-        panelParams.x = ((screenWidth() - panelParams.width) / 2).coerceAtLeast(dp(8))
-        panelParams.y = (bubbleParams.y + dp(64)).coerceAtMost(screenHeight() - dp(220))
+        panelParams.width = panelWidth()
+        // Centre under the bubble on a wide screen, centre on the screen on a narrow one, and never
+        // let either edge leave the display.
+        val bubbleCenter = bubbleParams.x + bubbleParams.width / 2
+        val preferredX = bubbleCenter - panelParams.width / 2
+        val maxX = (screenWidth() - panelParams.width - dp(8)).coerceAtLeast(dp(8))
+        panelParams.x = preferredX.coerceIn(dp(8), maxX)
+        panelParams.y = (bubbleParams.y + bubbleParams.height + dp(8))
+            .coerceAtMost((screenHeight() - dp(240)).coerceAtLeast(0))
         runCatching { windowManager.updateViewLayout(panel, panelParams) }
     }
 
@@ -439,12 +465,13 @@ class BubbleService : Service() {
         status(getString(R.string.bubble_listening))
 
         work = scope.launch {
-            var heard: String? = null
-            voice.listen().collect { ev ->
+            var heard: VoiceRecognizer.Event.Final? = null
+            val appNames = runCatching { device.listApps().map { it.label } }.getOrDefault(emptyList())
+            voice.listen(bias = appNames).collect { ev ->
                 when (ev) {
                     is VoiceRecognizer.Event.Listening -> status(getString(R.string.bubble_listening))
                     is VoiceRecognizer.Event.Partial -> status(ev.text)
-                    is VoiceRecognizer.Event.Final -> heard = ev.text
+                    is VoiceRecognizer.Event.Final -> heard = ev
                     is VoiceRecognizer.Event.Failed -> {
                         lastRunFailed = true
                         state = State.RESULT
@@ -455,16 +482,18 @@ class BubbleService : Service() {
                     }
                 }
             }
-            heard?.let { runAgent(client, it) }
+            heard?.let { runAgent(client, shown = it.text, task = VoiceRecognizer.taskText(it)) }
         }
     }
 
+    /** [shown] is what the user sees they said; [task] is that plus recognizer context for the model. */
     private suspend fun runAgent(
         client: com.anthropic.client.AnthropicClient,
+        shown: String,
         task: String,
     ) {
         state = State.WORKING
-        status("\"$task\"")
+        status("\"$shown\"")
         log("· " + getString(R.string.bubble_thinking))
 
         ClaudeAgent(client, device, BuildConfig.CLAUDE_MODEL)

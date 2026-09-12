@@ -187,6 +187,19 @@ follow once it runs against real tasks.
   `foregroundServiceType="microphone"` and hold `FOREGROUND_SERVICE_MICROPHONE`, and `adb` cannot
   start a non-exported one for you (`Requires permission not exported from uid ...`) — the tap has
   to come from the app.
+- **The recognizer is a system role, and on this Galaxy every holder of it is on-device.** The
+  default is Google's offline recognizer (`com.google.android.tts`); the other two installed are
+  also local. A small local vocabulary transcribes an unknown band name in the partial results and
+  then rewrites the final transcript without it — "유튜브에서 하츠투하츠 …" became "유튜브에서
+  뮤직비디오 틀어줘". The fix is not a better decoder but a better reader: the final transcript, the
+  N-best alternatives and the longest partial all go to the model, which is told that names it does
+  not see in the final are probably real. App labels are also passed as biasing strings (API 33+).
+- **A foldable changes its window mid-service.** The bubble's panel was measured once at start-up,
+  so a panel created unfolded stayed 2100 px wide after folding onto a 1248 px screen. Overlay
+  windows do not get recreated the way an Activity does; the Service has to handle
+  `onConfigurationChanged` itself, re-read `WindowManager.currentWindowMetrics`, clamp the bubble
+  back on screen and re-measure the panel — now capped at 380 dp so the unfolded display gets a
+  reading column, not a banner.
 - **Toolchain notes.** Android Studio 2026.1 bundles JBR 25; Gradle 8.14 wants a 17–24 JDK for the
   daemon, so the wrapper is pointed at Homebrew's `openjdk@17` through `~/.gradle/gradle.properties`.
   The wrapper *launcher* still needs `java` on `PATH` or `JAVA_HOME` in non-interactive shells.
