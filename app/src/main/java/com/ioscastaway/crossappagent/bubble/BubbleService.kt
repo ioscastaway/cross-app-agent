@@ -22,7 +22,6 @@ import android.view.ViewConfiguration
 import android.view.WindowManager
 import android.widget.Button
 import android.widget.LinearLayout
-import android.widget.ScrollView
 import android.widget.TextView
 import androidx.core.app.NotificationCompat
 import com.ioscastaway.crossappagent.R
@@ -86,11 +85,14 @@ class BubbleService : Service() {
     private lateinit var bubble: BubbleFaceView
     private lateinit var bubbleParams: WindowManager.LayoutParams
 
+    /** Which edge the bubble is parked on, and how far down. Absolute pixels mean nothing across a fold. */
+    private var dockedRight = true
+    private var dockFraction = 1f / 3f
+
     private lateinit var panel: LinearLayout
     private lateinit var panelParams: WindowManager.LayoutParams
     private lateinit var statusText: TextView
-    private lateinit var logText: TextView
-    private lateinit var logScroll: ScrollView
+    private lateinit var activityText: TextView
     private lateinit var buttonRow: LinearLayout
     private var panelShown = false
     private var lastRunFailed = false
@@ -198,8 +200,8 @@ class BubbleService : Service() {
             PixelFormat.TRANSLUCENT,
         ).apply {
             gravity = Gravity.TOP or Gravity.START
-            x = screenWidth() - size - dp(8)
-            y = screenHeight() / 3
+            x = dockX(size)
+            y = dockY(size)
         }
 
         attachDragAndTap(size)
@@ -254,10 +256,17 @@ class BubbleService : Service() {
         }
     }
 
+    private fun dockX(size: Int): Int =
+        if (dockedRight) (screenWidth() - size - dp(8)).coerceAtLeast(0) else dp(8)
+
+    private fun dockY(size: Int): Int =
+        (dockFraction * (screenHeight() - size).coerceAtLeast(0)).roundToInt()
+
     /** Slide to whichever side edge is nearer, the way every bubble UI on this platform behaves. */
     private fun snapToEdge(size: Int) {
-        val target = if (bubbleParams.x + size / 2 < screenWidth() / 2) dp(8)
-        else screenWidth() - size - dp(8)
+        dockedRight = bubbleParams.x + size / 2 >= screenWidth() / 2
+        dockFraction = bubbleParams.y.toFloat() / (screenHeight() - size).coerceAtLeast(1)
+        val target = dockX(size)
         ValueAnimator.ofInt(bubbleParams.x, target).apply {
             duration = 180
             addUpdateListener {
@@ -292,9 +301,11 @@ class BubbleService : Service() {
      */
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
+        // Re-dock to the same edge at the same relative height. Clamping the old pixel position
+        // would leave a right-docked bubble stranded mid-screen after unfolding.
         val size = bubbleParams.width
-        bubbleParams.x = bubbleParams.x.coerceIn(0, (screenWidth() - size).coerceAtLeast(0))
-        bubbleParams.y = bubbleParams.y.coerceIn(0, (screenHeight() - size).coerceAtLeast(0))
+        bubbleParams.x = dockX(size)
+        bubbleParams.y = dockY(size)
         runCatching { windowManager.updateViewLayout(bubble, bubbleParams) }
         panelParams.width = panelWidth()
         if (panelShown) positionPanel()
@@ -307,18 +318,19 @@ class BubbleService : Service() {
 
         statusText = TextView(ctx).apply {
             setTextColor(Color.WHITE)
-            textSize = 15f
-            setPadding(0, 0, 0, dp(6))
+            textSize = 14f
+            maxLines = 2
+            ellipsize = android.text.TextUtils.TruncateAt.END
         }
-        logText = TextView(ctx).apply {
+        // One line of "what it is doing right now". Enough to show the agent is alive; a scrolling
+        // log made the panel tall enough to hide the very screen the agent is working on.
+        activityText = TextView(ctx).apply {
             setTextColor(Color.parseColor("#B9BDC7"))
             textSize = 12f
-        }
-        logScroll = ScrollView(ctx).apply {
-            addView(logText)
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, dp(120)
-            )
+            maxLines = 1
+            ellipsize = android.text.TextUtils.TruncateAt.END
+            visibility = View.GONE
+            setPadding(0, dp(4), 0, 0)
         }
         buttonRow = LinearLayout(ctx).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -327,7 +339,7 @@ class BubbleService : Service() {
 
         panel = LinearLayout(ctx).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(14), dp(12), dp(14), dp(12))
+            setPadding(dp(14), dp(10), dp(14), dp(10))
             background = GradientDrawable().apply {
                 cornerRadius = dp(16).toFloat()
                 setColor(Color.parseColor("#E6191C22"))
@@ -335,7 +347,7 @@ class BubbleService : Service() {
             elevation = dp(8).toFloat()
             importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
             addView(statusText)
-            addView(logScroll)
+            addView(activityText)
             addView(buttonRow)
         }
 
@@ -357,7 +369,7 @@ class BubbleService : Service() {
         val maxX = (screenWidth() - panelParams.width - dp(8)).coerceAtLeast(dp(8))
         panelParams.x = preferredX.coerceIn(dp(8), maxX)
         panelParams.y = (bubbleParams.y + bubbleParams.height + dp(8))
-            .coerceAtMost((screenHeight() - dp(240)).coerceAtLeast(0))
+            .coerceAtMost((screenHeight() - dp(140)).coerceAtLeast(0))
         runCatching { windowManager.updateViewLayout(panel, panelParams) }
     }
 
@@ -380,12 +392,13 @@ class BubbleService : Service() {
     }
 
     private fun log(line: String) {
-        logText.append(if (logText.text.isEmpty()) line else "\n$line")
-        logScroll.post { logScroll.fullScroll(View.FOCUS_DOWN) }
+        activityText.text = line
+        activityText.visibility = View.VISIBLE
     }
 
     private fun clearLog() {
-        logText.text = ""
+        activityText.text = ""
+        activityText.visibility = View.GONE
         buttons()
     }
 
